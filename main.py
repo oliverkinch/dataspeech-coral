@@ -75,23 +75,23 @@ if __name__ == "__main__":
     )
     
     print("Compute speaking rate")
-    if "speech_duration" in snr_dataset[next(iter(snr_dataset.keys()))].features:    
-        rate_dataset = snr_dataset.map(
-            rate_apply,
-            with_rank=False,
-            num_proc=args.cpu_num_workers,
-            writer_batch_size= args.cpu_writer_batch_size,
-            fn_kwargs={"audio_column_name": audio_column_name, "text_column_name": text_column_name},
-        )
-    else:
-        rate_dataset = dataset.map(
-            rate_apply,
-            with_rank=False,
-            num_proc=args.cpu_num_workers,
-            writer_batch_size= args.cpu_writer_batch_size,
-            remove_columns=[audio_column_name], # tricks to avoid rewritting audio
-            fn_kwargs={"audio_column_name": audio_column_name, "text_column_name": text_column_name},
-        )
+    # if "speech_duration" in snr_dataset[next(iter(snr_dataset.keys()))].features:    
+    #     rate_dataset = dataset.map(
+    #         rate_apply,
+    #         with_rank=False,
+    #         num_proc=args.cpu_num_workers,
+    #         writer_batch_size= args.cpu_writer_batch_size,
+    #         fn_kwargs={"audio_column_name": audio_column_name, "text_column_name": text_column_name},
+    #     )
+    # else:
+    rate_dataset = dataset.map(
+        rate_apply,
+        with_rank=False,
+        num_proc=args.cpu_num_workers,
+        writer_batch_size= args.cpu_writer_batch_size,
+        remove_columns=[audio_column_name], # tricks to avoid rewritting audio
+        fn_kwargs={"audio_column_name": audio_column_name, "text_column_name": text_column_name},
+    )
     
     for split in dataset.keys():
         dataset[split] = pitch_dataset[split].add_column("snr", snr_dataset[split]["snr"]).add_column("c50", snr_dataset[split]["c50"])
