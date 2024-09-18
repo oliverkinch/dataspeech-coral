@@ -96,28 +96,29 @@ if __name__ == "__main__":
         snr_dataset.push_to_hub(sns_dataset_name)
     
     print("Compute speaking rate")
-    # if "speech_duration" in snr_dataset[next(iter(snr_dataset.keys()))].features:    
-    #     rate_dataset = dataset.map(
-    #         rate_apply,
-    #         with_rank=False,
-    #         num_proc=args.cpu_num_workers,
-    #         writer_batch_size= args.cpu_writer_batch_size,
-    #         fn_kwargs={"audio_column_name": audio_column_name, "text_column_name": text_column_name},
-    #     )
-    # else:
-
     rate_dataset_name = f"{args.dataset_name}-rate"
     try:
         rate_dataset = load_dataset(rate_dataset_name, num_proc=args.cpu_num_workers,)
     except:
-        rate_dataset = dataset.map(
-            rate_apply,
-            with_rank=False,
-            num_proc=args.cpu_num_workers,
-            writer_batch_size= args.cpu_writer_batch_size,
-            remove_columns=[audio_column_name], # tricks to avoid rewritting audio
-            fn_kwargs={"audio_column_name": audio_column_name, "text_column_name": text_column_name},
-        )
+        if "speech_duration" in snr_dataset[next(iter(snr_dataset.keys()))].features:  
+            print("Using speech duration")  
+            rate_dataset = dataset.map(
+                rate_apply,
+                with_rank=False,
+                num_proc=args.cpu_num_workers,
+                writer_batch_size= args.cpu_writer_batch_size,
+                fn_kwargs={"audio_column_name": audio_column_name, "text_column_name": text_column_name},
+            )
+        else:
+            print("No speech duration, using default")
+            rate_dataset = dataset.map(
+                rate_apply,
+                with_rank=False,
+                num_proc=args.cpu_num_workers,
+                writer_batch_size= args.cpu_writer_batch_size,
+                remove_columns=[audio_column_name], # tricks to avoid rewritting audio
+                fn_kwargs={"audio_column_name": audio_column_name, "text_column_name": text_column_name},
+            )
         # push to hub
         rate_dataset.push_to_hub(rate_dataset_name)
     
