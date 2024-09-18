@@ -42,37 +42,58 @@ if __name__ == "__main__":
 
     if args.apply_squim_quality_estimation:
         print("Compute SI-SDR, PESQ, STOI")
-        squim_dataset = dataset.map(
-            squim_apply,
+        squim_dataset_name = f"{args.dataset_name}-squim"
+        # load from hub if available
+        try:
+            squim_dataset = load_dataset(squim_dataset_name, num_proc=args.cpu_num_workers,)
+        except:
+            squim_dataset = dataset.map(
+                squim_apply,
+                batched=True,
+                batch_size=args.batch_size,
+                with_rank=True if torch.cuda.device_count()>0 else False,
+                num_proc=torch.cuda.device_count()*args.num_workers_per_gpu_for_squim if torch.cuda.device_count()>0 else args.cpu_num_workers,
+                remove_columns=[audio_column_name], # tricks to avoid rewritting audio
+                fn_kwargs={"audio_column_name": audio_column_name,},
+            )
+            # push to hub
+            squim_dataset.push_to_hub(squim_dataset_name)
+            print(f"Pushed to the hub: {squim_dataset_name}")
+
+    print("Compute pitch")
+    pitch_dataset_name = f"{args.dataset_name}-pitch"
+    try:
+        pitch_dataset = load_dataset(pitch_dataset_name, num_proc=args.cpu_num_workers,)
+    except:
+        pitch_dataset = dataset.cast_column(audio_column_name, Audio(sampling_rate=16_000)).map(
+            pitch_apply,
             batched=True,
             batch_size=args.batch_size,
             with_rank=True if torch.cuda.device_count()>0 else False,
-            num_proc=torch.cuda.device_count()*args.num_workers_per_gpu_for_squim if torch.cuda.device_count()>0 else args.cpu_num_workers,
+            num_proc=torch.cuda.device_count()*args.num_workers_per_gpu_for_pitch if torch.cuda.device_count()>0 else args.cpu_num_workers,
             remove_columns=[audio_column_name], # tricks to avoid rewritting audio
-            fn_kwargs={"audio_column_name": audio_column_name,},
+            fn_kwargs={"audio_column_name": audio_column_name, "penn_batch_size": args.penn_batch_size},
         )
-
-    print("Compute pitch")
-    pitch_dataset = dataset.cast_column(audio_column_name, Audio(sampling_rate=16_000)).map(
-        pitch_apply,
-        batched=True,
-        batch_size=args.batch_size,
-        with_rank=True if torch.cuda.device_count()>0 else False,
-        num_proc=torch.cuda.device_count()*args.num_workers_per_gpu_for_pitch if torch.cuda.device_count()>0 else args.cpu_num_workers,
-        remove_columns=[audio_column_name], # tricks to avoid rewritting audio
-        fn_kwargs={"audio_column_name": audio_column_name, "penn_batch_size": args.penn_batch_size},
-    )
+        # push to hub
+        pitch_dataset.push_to_hub(pitch_dataset_name)
+        print(f"Pushed to the hub: {pitch_dataset_name}")
 
     print("Compute snr and reverb")
-    snr_dataset = dataset.map(
-        snr_apply,
-        batched=True,
-        batch_size=args.batch_size,
-        with_rank=True if torch.cuda.device_count()>0 else False,
-        num_proc=torch.cuda.device_count()*args.num_workers_per_gpu_for_snr if torch.cuda.device_count()>0 else args.cpu_num_workers,
-        remove_columns=[audio_column_name], # tricks to avoid rewritting audio
-        fn_kwargs={"audio_column_name": audio_column_name},
-    )
+    sns_dataset_name = f"{args.dataset_name}-snr"
+    try:
+        snr_dataset = load_dataset(sns_dataset_name, num_proc=args.cpu_num_workers,)
+    except:
+        snr_dataset = dataset.map(
+            snr_apply,
+            batched=True,
+            batch_size=args.batch_size,
+            with_rank=True if torch.cuda.device_count()>0 else False,
+            num_proc=torch.cuda.device_count()*args.num_workers_per_gpu_for_snr if torch.cuda.device_count()>0 else args.cpu_num_workers,
+            remove_columns=[audio_column_name], # tricks to avoid rewritting audio
+            fn_kwargs={"audio_column_name": audio_column_name},
+        )
+        # push to hub
+        snr_dataset.push_to_hub(sns_dataset_name)
     
     print("Compute speaking rate")
     # if "speech_duration" in snr_dataset[next(iter(snr_dataset.keys()))].features:    
@@ -84,14 +105,21 @@ if __name__ == "__main__":
     #         fn_kwargs={"audio_column_name": audio_column_name, "text_column_name": text_column_name},
     #     )
     # else:
-    rate_dataset = dataset.map(
-        rate_apply,
-        with_rank=False,
-        num_proc=args.cpu_num_workers,
-        writer_batch_size= args.cpu_writer_batch_size,
-        remove_columns=[audio_column_name], # tricks to avoid rewritting audio
-        fn_kwargs={"audio_column_name": audio_column_name, "text_column_name": text_column_name},
-    )
+
+    rate_dataset_name = f"{args.dataset_name}-rate"
+    try:
+        rate_dataset = load_dataset(rate_dataset_name, num_proc=args.cpu_num_workers,)
+    except:
+        rate_dataset = dataset.map(
+            rate_apply,
+            with_rank=False,
+            num_proc=args.cpu_num_workers,
+            writer_batch_size= args.cpu_writer_batch_size,
+            remove_columns=[audio_column_name], # tricks to avoid rewritting audio
+            fn_kwargs={"audio_column_name": audio_column_name, "text_column_name": text_column_name},
+        )
+        # push to hub
+        rate_dataset.push_to_hub(rate_dataset_name)
     
     for split in dataset.keys():
         dataset[split] = pitch_dataset[split].add_column("snr", snr_dataset[split]["snr"]).add_column("c50", snr_dataset[split]["c50"])
